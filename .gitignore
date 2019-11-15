@@ -1,0 +1,11 @@
+# IDEA
+.idea/
+*.iml
+
+# Mac
+*.DS_Store
+
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
