@@ -1,0 +1,12 @@
+[package]
+name = "render_derive"
+version = "0.1.0"
+authors = ["CJ Burkey <cjburkey01@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+quote = "1.0.2"
+syn = { version = "1.0.8", features = ["extra-traits"] }
+
+[lib]
+proc-macro = true

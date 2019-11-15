@@ -266,3 +266,62 @@ impl Drop for VertexArray {
         println!("Dropping vertex array {}", self.id);
     }
 }
+
+pub trait VertComponent {
+    fn attrib_pointer(gl: &Gl, location: u32, stride: usize, offset: i32);
+}
+
+pub trait VertexAttrib {
+    fn setup_attrib_pointer(gl: &Gl);
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C, packed)]
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Vec3 {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
+}
+
+impl VertComponent for Vec3 {
+    fn attrib_pointer(gl: &Gl, location: u32, stride: usize, offset: i32) {
+        unsafe {
+            gl.VertexAttribPointer(
+                location as crate::gl::types::GLuint,
+                3,
+                crate::gl::FLOAT,
+                crate::gl::FALSE,
+                stride as crate::gl::types::GLint,
+                offset as *const crate::gl::types::GLvoid,
+            );
+        }
+    }
+}
+
+impl From<(f32, f32, f32)> for Vec3 {
+    fn from(tuple: (f32, f32, f32)) -> Self {
+        Self::new(tuple.0, tuple.1, tuple.2)
+    }
+}
+
+#[derive(VertexAttribPointers, Copy, Clone, Debug)]
+#[repr(C, packed)]
+pub struct Vertex {
+    #[location = 0]
+    pub pos: Vec3,
+
+    #[location = 1]
+    pub col: Vec3,
+}
+
+impl Vertex {
+    pub fn new(pos: Vec3, col: Vec3) -> Self {
+        Self { pos, col }
+    }
+}

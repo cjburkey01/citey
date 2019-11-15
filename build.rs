@@ -6,6 +6,10 @@ use std::fs::File;
 use std::path::Path;
 
 fn main() {
+    // GLFW
+    println!("cargo:rustc-link-search=C:\\Program Files (x86)\\GLFW\\lib");
+
+    // OpenGL
     let dest = env::var("OUT_DIR").unwrap();
     let mut file = File::create(&Path::new(&dest).join("gl_bindings.rs")).unwrap();
 

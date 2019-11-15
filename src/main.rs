@@ -1,4 +1,7 @@
-use crate::render::VertexArray;
+#[macro_use]
+extern crate render_derive;
+
+use crate::render::{Vertex, VertexArray, VertexAttrib};
 use gl::types::{GLushort, GLvoid};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
@@ -89,32 +92,36 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
     vao.bind();
 
     let mut vbo = Buffer::new(&gl);
-    let vertex_data: Vec<f32> = vec![
-        // BL            Top            BR
-        -0.5, -0.5, 0.0, 0.0, 0.5, 0.0, 0.5, -0.5, 0.0,
+    let vertex_data: Vec<Vertex> = vec![
+        // Bottom left
+        Vertex::new((-0.5, -0.5, 0.0).into(), (1.0, 0.0, 0.0).into()),
+        // Top left
+        Vertex::new((-0.5, 0.5, 0.0).into(), (1.0, 1.0, 0.0).into()),
+        // Top right
+        Vertex::new((0.5, 0.5, 0.0).into(), (0.0, 1.0, 0.0).into()),
+        // Bottom right
+        Vertex::new((0.5, -0.5, 0.0).into(), (0.0, 0.0, 1.0).into()),
     ];
     vbo.buffer(gl::ARRAY_BUFFER, gl::STATIC_DRAW, vertex_data);
     vbo.bind(gl::ARRAY_BUFFER);
-    unsafe {
-        gl.VertexAttribPointer(
-            0,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            (3 * std::mem::size_of::<f32>()) as gl::types::GLint,
-            std::ptr::null(),
-        )
-    };
+    Vertex::setup_attrib_pointer(&gl);
     vbo.unbind(gl::ARRAY_BUFFER);
 
     let mut ebo = Buffer::new(&gl);
-    let element_data: Vec<GLushort> = vec![0, 1, 2];
+    let element_data: Vec<GLushort> = vec![0, 1, 2, 0, 2, 3];
     ebo.buffer(gl::ELEMENT_ARRAY_BUFFER, gl::STATIC_DRAW, element_data);
 
     vao.unbind();
 
     // Keep looping until the user tries to close the window
     while !window.should_close() {
+        // Poll for new events and handle all of them
+        glfw.poll_events();
+        for (_, event) in glfw::flush_messages(&events) {
+            println!("{:?}", event);
+            handle_window_event(&gl, &mut window, event);
+        }
+
         // Update frame counter
         let current_loop_time = SystemTime::now();
         if current_loop_time
@@ -128,12 +135,6 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
             frames = 0;
         }
 
-        // Poll for new events and handle all of them
-        glfw.poll_events();
-        for (_, event) in glfw::flush_messages(&events) {
-            handle_window_event(&gl, &mut window, event);
-        }
-
         // Clear the screen
         unsafe {
             gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -145,7 +146,9 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
             vao.bind();
             ebo.bind(gl::ELEMENT_ARRAY_BUFFER);
             unsafe { gl.EnableVertexAttribArray(0) };
-            unsafe { gl.DrawElements(gl::TRIANGLES, 3, gl::UNSIGNED_SHORT, std::ptr::null()) };
+            unsafe { gl.EnableVertexAttribArray(1) };
+            unsafe { gl.DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_SHORT, std::ptr::null()) };
+            unsafe { gl.DisableVertexAttribArray(1) };
             unsafe { gl.DisableVertexAttribArray(0) };
             ebo.unbind(gl::ELEMENT_ARRAY_BUFFER);
             vao.unbind();
@@ -170,9 +173,9 @@ fn handle_window_event(gl: &Gl, window: &mut glfw::Window, event: glfw::WindowEv
 
 fn init_shaders(gl: &Gl) -> ShaderProgram {
     const VERT_SHADER: &str =
-        "#version 330 core\n\nlayout(location = 0) in vec3 vertPos;\n\nvoid main() {\n\tgl_Position = vec4(vertPos, 1.0);\n}\n";
+        "#version 330 core\n\nlayout(location = 0) in vec3 vertPos;\nlayout(location = 1) in vec3 color;\n\nout vec3 vertColor;\n\nvoid main() {\n\tgl_Position = vec4(vertPos, 1.0);\n\tvertColor = color;\n}\n";
     const FRAG_SHADER: &str =
-        "#version 330 core\n\nout vec4 fragColor;\n\nvoid main() {\n\tfragColor = vec4(1.0, 0.5, 0.2, 1.0);\n}\n";
+        "#version 330 core\n\nin vec3 vertColor;\n\nout vec4 fragColor;\n\nvoid main() {\n\tfragColor = vec4(vertColor, 1.0);\n}\n";
 
     let vert_shader =
         Shader::new_from_source(&gl, gl::VERTEX_SHADER, &CString::new(VERT_SHADER).unwrap())
