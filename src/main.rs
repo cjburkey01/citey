@@ -1,5 +1,5 @@
 use crate::render::VertexArray;
-use gl::types::GLvoid;
+use gl::types::{GLushort, GLvoid};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
 };
@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::time::SystemTime;
 
+#[allow(clippy::all)]
 pub mod gl {
     // Include the generated OpenGL bindings
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
@@ -71,7 +72,7 @@ fn main() {
 
     // Set the background color
     unsafe {
-        gl.ClearColor(0.9f32, 0.9f32, 0.9f32, 1.0f32);
+        gl.ClearColor(0.5f32, 0.5f32, 0.5f32, 1.0f32);
     }
 
     // Start the game loop
@@ -93,10 +94,21 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
         -0.5, -0.5, 0.0, 0.0, 0.5, 0.0, 0.5, -0.5, 0.0,
     ];
     vbo.buffer(gl::ARRAY_BUFFER, gl::STATIC_DRAW, vertex_data);
-    unsafe { gl.VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 0, std::ptr::null()) };
+    vbo.bind(gl::ARRAY_BUFFER);
+    unsafe {
+        gl.VertexAttribPointer(
+            0,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            (3 * std::mem::size_of::<f32>()) as gl::types::GLint,
+            std::ptr::null(),
+        )
+    };
+    vbo.unbind(gl::ARRAY_BUFFER);
 
     let mut ebo = Buffer::new(&gl);
-    let element_data: Vec<u8> = vec![0, 1, 2];
+    let element_data: Vec<GLushort> = vec![0, 1, 2];
     ebo.buffer(gl::ELEMENT_ARRAY_BUFFER, gl::STATIC_DRAW, element_data);
 
     vao.unbind();
@@ -130,13 +142,13 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
         // Draw a triangle
         {
             shader.bind();
-            ebo.bind(gl::ELEMENT_ARRAY_BUFFER);
             vao.bind();
+            ebo.bind(gl::ELEMENT_ARRAY_BUFFER);
             unsafe { gl.EnableVertexAttribArray(0) };
-            unsafe { gl.DrawElements(gl::TRIANGLES, 3, gl::UNSIGNED_BYTE, std::ptr::null()) };
+            unsafe { gl.DrawElements(gl::TRIANGLES, 3, gl::UNSIGNED_SHORT, std::ptr::null()) };
             unsafe { gl.DisableVertexAttribArray(0) };
-            vao.unbind();
             ebo.unbind(gl::ELEMENT_ARRAY_BUFFER);
+            vao.unbind();
             shader.unbind();
         }
 
@@ -160,7 +172,7 @@ fn init_shaders(gl: &Gl) -> ShaderProgram {
     const VERT_SHADER: &str =
         "#version 330 core\n\nlayout(location = 0) in vec3 vertPos;\n\nvoid main() {\n\tgl_Position = vec4(vertPos, 1.0);\n}\n";
     const FRAG_SHADER: &str =
-        "#version 330 core\n\nout vec4 fragColor;\n\nvoid main() {\n\tfragColor = vec4(1.0, 1.0, 1.0, 1.0);\n}\n";
+        "#version 330 core\n\nout vec4 fragColor;\n\nvoid main() {\n\tfragColor = vec4(1.0, 0.5, 0.2, 1.0);\n}\n";
 
     let vert_shader =
         Shader::new_from_source(&gl, gl::VERTEX_SHADER, &CString::new(VERT_SHADER).unwrap())
