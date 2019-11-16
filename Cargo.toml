@@ -5,14 +5,12 @@ authors = ["CJ Burkey <cjburkey01@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-render_derive = { path = "render_derive" }
-
-[build-dependencies]
-gl_generator = "0.14.0"
+gl_bindings = { path = "gl_bindings" }
+render = { path = "render" }
 
 [dependencies.glfw]
 git = "https://github.com/bjz/glfw-rs.git"
 default-features = false
 
 [features]
-debug = []
+gl_debug = ["gl_bindings/debug"]

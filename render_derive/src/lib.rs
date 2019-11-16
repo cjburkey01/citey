@@ -40,7 +40,7 @@ fn generate_impl(ast: syn::DeriveInput) -> TokenStream2 {
     let where_clause = &ast.generics.where_clause;
     quote! {
         // Implement this vertex attrib type for this struct
-        impl #generics crate::render::VertexAttrib for #ident #generics #where_clause {
+        impl #generics VertexAttrib for #ident #generics #where_clause {
             fn setup_attrib_pointer(gl: &crate::Gl) {
                 // The byte size of each vertex
                 let stride = ::std::mem::size_of::<Self>();
@@ -54,14 +54,14 @@ fn generate_impl(ast: syn::DeriveInput) -> TokenStream2 {
                 #(#fields_vertex_attrib_pointer)*
             }
 
-            fn enable_attribs(gl: &crate::Gl) {
+            fn enable_attribs(gl: &::gl_bindings::Gl) {
                 // Enable all of the attribute locations
                 unsafe {
                     #(#fields_enable)*
                 }
             }
 
-            fn disable_attribs(gl: &crate::Gl) {
+            fn disable_attribs(gl: &::gl_bindings::Gl) {
                 // Disable all of the attribute locations
                 unsafe {
                     #(#fields_disable)*

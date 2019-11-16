@@ -1,0 +1,9 @@
+[package]
+name = "render"
+version = "0.1.0"
+authors = ["CJ Burkey <cjburkey01@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+gl_bindings = { path = "../gl_bindings" }
+render_derive = { path = "../render_derive" }

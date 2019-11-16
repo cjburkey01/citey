@@ -1,49 +1,13 @@
-#[macro_use]
-extern crate render_derive;
-
-use crate::render::{Mesh, Vertex};
-use gl::types::{GLushort, GLvoid};
+use gl_bindings::gl::types::GLushort;
+use gl_bindings::{gl, Gl};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
 };
+use render::{Mesh, Vertex};
 use render::{Shader, ShaderProgram};
 use std::ffi::CString;
-use std::ops::Deref;
-use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::time::SystemTime;
-
-#[allow(clippy::all)]
-pub mod gl {
-    // Include the generated OpenGL bindings
-    include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
-}
-
-pub mod render;
-
-#[derive(Clone)]
-pub struct Gl {
-    inner: Rc<gl::Gl>,
-}
-
-impl Gl {
-    pub fn load_with<F>(loadfn: F) -> Self
-    where
-        F: FnMut(&'static str) -> *const GLvoid,
-    {
-        Self {
-            inner: Rc::new(gl::Gl::load_with(loadfn)),
-        }
-    }
-}
-
-impl Deref for Gl {
-    type Target = gl::Gl;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
 
 fn main() {
     println!("Hello, world!");
@@ -69,17 +33,22 @@ fn main() {
 
     glfw.with_primary_monitor_mut(|_, m| {
         if let Some(monitor) = m {
+            // Get the monitor information
             let monitor_vidmode = monitor
                 .get_video_mode()
                 .expect("failed to get monitor vidmode");
+
+            // Set the window size to 2/3 of the monitor size
             window.set_size(
                 monitor_vidmode.width as i32 * 2 / 3,
                 monitor_vidmode.height as i32 * 2 / 3,
             );
+
+            // Center the monitor on the screen
             window.set_pos(
                 (monitor_vidmode.width as i32 - window.get_size().0) / 2,
                 (monitor_vidmode.height as i32 - window.get_size().1) / 2,
-            )
+            );
         }
     });
 
