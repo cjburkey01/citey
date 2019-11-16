@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 gl_bindings = { path = "gl_bindings" }
 render = { path = "render" }
+render_derive = { path = "render_derive" }
 
 [dependencies.glfw]
 git = "https://github.com/bjz/glfw-rs.git"

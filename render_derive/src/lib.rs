@@ -40,8 +40,8 @@ fn generate_impl(ast: syn::DeriveInput) -> TokenStream2 {
     let where_clause = &ast.generics.where_clause;
     quote! {
         // Implement this vertex attrib type for this struct
-        impl #generics VertexAttrib for #ident #generics #where_clause {
-            fn setup_attrib_pointer(gl: &crate::Gl) {
+        impl #generics ::render::VertexAttrib for #ident #generics #where_clause {
+            fn setup_attrib_pointer(gl: &::gl_bindings::Gl) {
                 // The byte size of each vertex
                 let stride = ::std::mem::size_of::<Self>();
 
@@ -146,7 +146,7 @@ fn generate_struct_field_vertex_attrib_pointer_call(
         },
         // Create the vertex attrib pointer
         quote! {
-            #field_type::attrib_pointer(gl, #location_value, stride, offset as i32);
+            ::render::VertComponent::<#field_type>::attrib_pointer(gl, #location_value, stride, offset as i32);
 
             // Increment the offset
             offset += ::std::mem::size_of::<#field_type>();

@@ -6,4 +6,3 @@ edition = "2018"
 
 [dependencies]
 gl_bindings = { path = "../gl_bindings" }
-render_derive = { path = "../render_derive" }

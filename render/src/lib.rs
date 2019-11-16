@@ -446,6 +446,33 @@ impl<VertexType: VertexAttrib, IndexType: Index> Mesh<VertexType, IndexType> {
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
+pub struct Vec2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Vec2 {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+}
+
+implement_vert_component!(Vec2, 2, gl::FLOAT);
+
+impl Uniform for Vec2 {
+    fn set_uniform(&self, gl: &Gl, location: GLint) {
+        unsafe { gl.Uniform2f(location, self.x, self.y) };
+    }
+}
+
+impl From<(f32, f32)> for Vec2 {
+    fn from(tuple: (f32, f32)) -> Self {
+        Self::new(tuple.0, tuple.1)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C, packed)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,
@@ -458,7 +485,7 @@ impl Vec3 {
     }
 }
 
-implement_vert_component!(Vec3, 3);
+implement_vert_component!(Vec3, 3, gl::FLOAT);
 
 impl Uniform for Vec3 {
     fn set_uniform(&self, gl: &Gl, location: GLint) {
@@ -472,18 +499,31 @@ impl From<(f32, f32, f32)> for Vec3 {
     }
 }
 
-#[derive(render_derive::VertexAttribPointers, Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
-pub struct Vertex {
-    #[location = 0]
-    pub pos: Vec3,
-
-    #[location = 1]
-    pub col: Vec3,
+pub struct Vec4 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
 }
 
-impl Vertex {
-    pub fn new(pos: Vec3, col: Vec3) -> Self {
-        Self { pos, col }
+impl Vec4 {
+    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+}
+
+implement_vert_component!(Vec4, 4, gl::FLOAT);
+
+impl Uniform for Vec4 {
+    fn set_uniform(&self, gl: &Gl, location: GLint) {
+        unsafe { gl.Uniform4f(location, self.x, self.y, self.z, self.w) };
+    }
+}
+
+impl From<(f32, f32, f32, f32)> for Vec4 {
+    fn from(tuple: (f32, f32, f32, f32)) -> Self {
+        Self::new(tuple.0, tuple.1, tuple.2, tuple.3)
     }
 }
