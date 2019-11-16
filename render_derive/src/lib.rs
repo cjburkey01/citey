@@ -146,7 +146,7 @@ fn generate_struct_field_vertex_attrib_pointer_call(
         },
         // Create the vertex attrib pointer
         quote! {
-            ::render::VertComponent::<#field_type>::attrib_pointer(gl, #location_value, stride, offset as i32);
+            <#field_type as ::render::VertComponent>::attrib_pointer(gl, #location_value, stride, offset as i32);
 
             // Increment the offset
             offset += ::std::mem::size_of::<#field_type>();

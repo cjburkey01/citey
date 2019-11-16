@@ -11,10 +11,6 @@ use std::ffi::CString;
 use std::sync::mpsc::Receiver;
 use std::time::SystemTime;
 
-// TODO:
-// Why the hell is it saying "wrong number of type arguments" for both fields??
-// 0 expected but 1 provided? I've done some macro expansion and it still is
-// only Vec3 so I'm not sure where the compiler is getting a type argument from
 #[derive(VertexAttribPointers, Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct Vertex {
