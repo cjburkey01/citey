@@ -1,13 +1,15 @@
 #[macro_use]
 extern crate render_derive;
 
-use gl::types::GLushort;
+use gl::types::{GLfloat, GLint, GLushort};
 use gl_bindings::{gl, Gl};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
 };
-use render::{Mesh, Shader, ShaderProgram, Vec3};
+use nalgebra::{Matrix4, Orthographic3};
+use render::{Mesh, Shader, ShaderProgram, Uniform, Vec3};
 use std::ffi::CString;
+use std::ops::Deref;
 use std::sync::mpsc::Receiver;
 use std::time::SystemTime;
 
@@ -27,9 +29,26 @@ impl Vertex {
     }
 }
 
-fn main() {
-    println!("Hello, world!");
+#[derive(Debug, Copy, Clone)]
+struct Mat4(Matrix4<f32>);
 
+impl Deref for Mat4 {
+    type Target = Matrix4<f32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Uniform for Mat4 {
+    fn set_uniform(&self, gl: &Gl, location: GLint) {
+        unsafe {
+            gl.UniformMatrix4fv(location, 1, gl::FALSE, self.as_ptr() as *const GLfloat);
+        }
+    }
+}
+
+fn main() {
     // Initialize GLFW
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
 
@@ -77,9 +96,7 @@ fn main() {
     glfw.set_swap_interval(SwapInterval::Sync(1));
 
     // Set the background color
-    unsafe {
-        gl.ClearColor(0.5f32, 0.5f32, 0.5f32, 1.0f32);
-    }
+    unsafe { gl.ClearColor(0.5f32, 0.5f32, 0.5f32, 1.0f32) };
 
     // Start the game loop
     start_game(glfw, window, events, gl);
@@ -93,17 +110,18 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
 
     let vertex_data: Vec<Vertex> = vec![
         // Bottom left
-        Vertex::new((-0.5, -0.5, 0.0).into(), (1.0, 0.0, 0.0).into()),
+        Vertex::new((-1.0, -1.0, -0.5).into(), (1.0, 0.0, 0.0).into()),
         // Top left
-        Vertex::new((-0.5, 0.5, 0.0).into(), (1.0, 1.0, 0.0).into()),
+        Vertex::new((-1.0, 1.0, -0.5).into(), (1.0, 1.0, 0.0).into()),
         // Top right
-        Vertex::new((0.5, 0.5, 0.0).into(), (0.0, 1.0, 0.0).into()),
+        Vertex::new((1.0, 1.0, -0.5).into(), (0.0, 1.0, 0.0).into()),
         // Bottom right
-        Vertex::new((0.5, -0.5, 0.0).into(), (0.0, 0.0, 1.0).into()),
+        Vertex::new((1.0, -1.0, -0.5).into(), (0.0, 0.0, 1.0).into()),
     ];
     let index_data: Vec<GLushort> = vec![0, 1, 2, 0, 2, 3];
     let mesh = Mesh::create(&gl, vertex_data, index_data);
 
+    // Uniform test
     let mut red = 0.0f32;
     let mut dir = false;
 
@@ -130,9 +148,16 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
             }
         }
 
+        // Update projection matrix
+        let win_size = window.get_size();
+        let aspect = win_size.0 as f32 / win_size.1 as f32;
+        let projection_ortho =
+            Orthographic3::<f32>::new(aspect * -1.5, aspect * 1.5, -1.5, 1.5, 0.1, 1.0);
+
         // Draw a triangle
         shader.bind();
-        shader.set_uniform("red", red);
+        shader.set_uniform("red", &red);
+        shader.set_uniform("projection_matrix", &Mat4(*projection_ortho.as_matrix()));
         mesh.render();
         shader.unbind();
 
@@ -213,6 +238,9 @@ fn create_shader_program(
     // Uniforms are defined when the shader program is created to prevent the
     // slowdown possibly incurred by getting the location of a shader at
     // runtime
-    let uniforms = vec!["red".to_owned()];
+    let uniforms = vec!["projection_matrix", "red"]
+        .into_iter()
+        .map(|s| s.to_owned())
+        .collect();
     ShaderProgram::new_from_shaders(&gl, vec![vert_shader, frag_shader], uniforms)
 }

@@ -7,7 +7,10 @@ out VS_OUT {
     vec3 color;
 } OUT;
 
+uniform mat4 projection_matrix;
+
 void main() {
-    gl_Position = vec4(vertex_position, 1.0);
     OUT.color = vertex_color;
+    
+    gl_Position = projection_matrix * vec4(vertex_position, 1.0);
 }

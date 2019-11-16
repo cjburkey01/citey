@@ -38,6 +38,8 @@ fn generate_impl(ast: syn::DeriveInput) -> TokenStream2 {
     let ident = &ast.ident;
     let generics = &ast.generics;
     let where_clause = &ast.generics.where_clause;
+
+    // Return
     quote! {
         // Implement this vertex attrib type for this struct
         impl #generics ::render::VertexAttrib for #ident #generics #where_clause {
@@ -88,15 +90,13 @@ fn generate_vertex_calls(body: &syn::Data) -> Vec<(TokenStream2, TokenStream2, T
             syn::Fields::Named(ref fields) => fields
                 .named
                 .iter()
-                .map(generate_struct_field_vertex_attrib_pointer_call)
+                .map(generate_field_vertex_call)
                 .collect(),
         },
     }
 }
 
-fn generate_struct_field_vertex_attrib_pointer_call(
-    field: &syn::Field,
-) -> (TokenStream2, TokenStream2, TokenStream2) {
+fn generate_field_vertex_call(field: &syn::Field) -> (TokenStream2, TokenStream2, TokenStream2) {
     // Get the name of this field within the struct
     let field_name = match field.ident {
         Some(ref i) => format!("{}", i),

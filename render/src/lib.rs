@@ -165,19 +165,24 @@ impl ShaderProgram {
         }
 
         for uniform_name in uniforms.into_iter() {
+            // Convert the uniform name to a CString
             let cstr = &CString::new(uniform_name.clone()).expect(&format!(
                 "failed to convert \"{}\" to CString",
                 &uniform_name
             ));
 
+            // Get the location of the uniform within the program
             let location =
                 unsafe { gl.GetUniformLocation(program.id, cstr.as_ptr() as *const GLchar) };
+
+            // location will be -1 if the uniform was not found or not used in the program
             if location < 0 {
                 println!(
                     "Failed to locate uniform \"{}\" in shader program",
                     uniform_name
                 );
             } else {
+                // Add the uniform to the hashmap for later retrieval
                 program.uniforms.insert(uniform_name, location);
             }
         }
@@ -186,7 +191,7 @@ impl ShaderProgram {
         Ok(program)
     }
 
-    pub fn set_uniform<UniformValue: Uniform>(&self, name: &str, value: UniformValue) {
+    pub fn set_uniform<UniformValue: Uniform>(&self, name: &str, value: &UniformValue) {
         if let Some(location) = self.uniforms.get(&name.to_owned()) {
             value.set_uniform(&self.gl, *location);
         }
@@ -353,8 +358,7 @@ pub struct Mesh<VertexType: VertexAttrib, IndexType: Index> {
     // We need ownership of the VBO so it's dropped when the mesh is, but it's
     // never actually *used* in the code after it's added to this struct, so
     // the compiler will display a warning
-    #[allow(dead_code)]
-    vbo: Buffer<VertexType>,
+    _vbo: Buffer<VertexType>,
     ebo: Buffer<IndexType>,
     indices: usize,
     gl: Gl,
@@ -370,7 +374,7 @@ impl<VertexType: VertexAttrib, IndexType: Index> Mesh<VertexType, IndexType> {
     ) -> Self {
         Self {
             vao,
-            vbo,
+            _vbo: vbo,
             ebo,
             indices,
             gl: gl.clone(),
