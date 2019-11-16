@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate render_derive;
 
-use crate::render::{Vertex, VertexArray, VertexAttrib};
+use crate::render::{Mesh, Vertex};
 use gl::types::{GLushort, GLvoid};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
 };
-use render::{Buffer, Shader, ShaderProgram};
+use render::{Shader, ShaderProgram};
 use std::ffi::CString;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -67,6 +67,22 @@ fn main() {
     // Make the window's context current
     window.make_current();
 
+    glfw.with_primary_monitor_mut(|_, m| {
+        if let Some(monitor) = m {
+            let monitor_vidmode = monitor
+                .get_video_mode()
+                .expect("failed to get monitor vidmode");
+            window.set_size(
+                monitor_vidmode.width as i32 * 2 / 3,
+                monitor_vidmode.height as i32 * 2 / 3,
+            );
+            window.set_pos(
+                (monitor_vidmode.width as i32 - window.get_size().0) / 2,
+                (monitor_vidmode.height as i32 - window.get_size().1) / 2,
+            )
+        }
+    });
+
     // Tell OpenGL how to access methods and get an instance of the Gl struct
     let gl = Gl::load_with(|s| window.get_proc_address(s) as *const _);
 
@@ -88,10 +104,6 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
 
     let shader = init_shaders(&gl);
 
-    let vao = VertexArray::new(&gl);
-    vao.bind();
-
-    let mut vbo = Buffer::new(&gl);
     let vertex_data: Vec<Vertex> = vec![
         // Bottom left
         Vertex::new((-0.5, -0.5, 0.0).into(), (1.0, 0.0, 0.0).into()),
@@ -102,16 +114,8 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
         // Bottom right
         Vertex::new((0.5, -0.5, 0.0).into(), (0.0, 0.0, 1.0).into()),
     ];
-    vbo.buffer(gl::ARRAY_BUFFER, gl::STATIC_DRAW, vertex_data);
-    vbo.bind(gl::ARRAY_BUFFER);
-    Vertex::setup_attrib_pointer(&gl);
-    vbo.unbind(gl::ARRAY_BUFFER);
-
-    let mut ebo = Buffer::new(&gl);
-    let element_data: Vec<GLushort> = vec![0, 1, 2, 0, 2, 3];
-    ebo.buffer(gl::ELEMENT_ARRAY_BUFFER, gl::STATIC_DRAW, element_data);
-
-    vao.unbind();
+    let index_data: Vec<GLushort> = vec![0, 1, 2, 0, 2, 3];
+    let mesh = Mesh::create(&gl, vertex_data, index_data);
 
     // Keep looping until the user tries to close the window
     while !window.should_close() {
@@ -124,19 +128,9 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
         }
 
         // Draw a triangle
-        {
-            shader.bind();
-            vao.bind();
-            ebo.bind(gl::ELEMENT_ARRAY_BUFFER);
-            unsafe { gl.EnableVertexAttribArray(0) };
-            unsafe { gl.EnableVertexAttribArray(1) };
-            unsafe { gl.DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_SHORT, std::ptr::null()) };
-            unsafe { gl.DisableVertexAttribArray(1) };
-            unsafe { gl.DisableVertexAttribArray(0) };
-            ebo.unbind(gl::ELEMENT_ARRAY_BUFFER);
-            vao.unbind();
-            shader.unbind();
-        }
+        shader.bind();
+        mesh.render();
+        shader.unbind();
 
         // Display changes in the window
         window.swap_buffers();
@@ -163,8 +157,8 @@ fn handle_window_events(
 
 fn handle_window_event(gl: &Gl, window: &mut glfw::Window, event: glfw::WindowEvent) {
     match event {
-        glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => window.set_should_close(true),
         glfw::WindowEvent::FramebufferSize(w, h) => unsafe { gl.Viewport(0, 0, w, h) },
+        glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => window.set_should_close(true),
         _ => {}
     }
 }
@@ -189,19 +183,28 @@ fn update_frame_counter(last_print_time: &mut SystemTime, frames: &mut i32) -> i
 }
 
 fn init_shaders(gl: &Gl) -> ShaderProgram {
-    const VERT_SHADER: &str = include_str!("shader/basic_vertex.glsl");
-    const FRAG_SHADER: &str = include_str!("shader/basic_fragment.glsl");
+    let vert_shader = include_str!("shader/basic_vertex.glsl");
+    let frag_shader = include_str!("shader/basic_fragment.glsl");
 
-    let vert_shader =
-        Shader::new_from_source(&gl, gl::VERTEX_SHADER, &CString::new(VERT_SHADER).unwrap())
-            .expect("failed to compile vertex shader");
+    create_shader_program(gl, vert_shader, frag_shader).unwrap()
+}
+
+fn create_shader_program(
+    gl: &Gl,
+    vertex_shader: &str,
+    fragment_shader: &str,
+) -> Result<ShaderProgram, String> {
+    let vert_shader = Shader::new_from_source(
+        &gl,
+        gl::VERTEX_SHADER,
+        &CString::new(vertex_shader).unwrap(),
+    )?;
+
     let frag_shader = Shader::new_from_source(
         &gl,
         gl::FRAGMENT_SHADER,
-        &CString::new(FRAG_SHADER).unwrap(),
-    )
-    .expect("failed to compile fragment shader");
+        &CString::new(fragment_shader).unwrap(),
+    )?;
 
     ShaderProgram::new_from_shaders(&gl, vec![vert_shader, frag_shader])
-        .expect("failed to link shader program")
 }

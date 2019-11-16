@@ -1,6 +1,7 @@
-use crate::gl::types::{GLchar, GLenum, GLint, GLsizeiptr, GLuint, GLvoid};
+use crate::gl::types::{GLchar, GLenum, GLint, GLsizeiptr, GLuint, GLushort, GLvoid};
 use crate::Gl;
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::mem::size_of;
 
 fn create_empty_vec_cstr(len: usize) -> Vec<u8> {
@@ -204,21 +205,33 @@ impl Buffer {
         Self::unbind_all(&self.gl, location);
     }
 
-    fn buffer_raw(&self, location: GLenum, usage: GLenum, size: usize, data: *const GLvoid) {
-        self.bind(location);
+    fn buffer_raw(
+        &self,
+        location: GLenum,
+        usage: GLenum,
+        size: usize,
+        data: *const GLvoid,
+        bind: bool,
+    ) {
+        if bind {
+            self.bind(location);
+        }
         unsafe {
             self.gl
                 .BufferData(location, size as GLsizeiptr, data, usage);
         };
-        self.unbind(location);
+        if bind {
+            self.unbind(location);
+        }
     }
 
-    pub fn buffer<T: Clone>(&mut self, location: GLenum, usage: GLenum, data: Vec<T>) {
+    pub fn buffer<T>(&mut self, location: GLenum, usage: GLenum, data: Vec<T>, bind: bool) {
         self.buffer_raw(
             location,
             usage,
             data.len() * size_of::<T>(),
             data.as_ptr() as *const GLvoid,
+            bind,
         );
     }
 }
@@ -267,12 +280,85 @@ impl Drop for VertexArray {
     }
 }
 
+pub struct Mesh<T: VertexAttrib> {
+    vao: VertexArray,
+    #[allow(dead_code)]
+    vbo: Buffer,
+    ebo: Buffer,
+    indices: usize,
+    gl: Gl,
+    phantom: PhantomData<T>,
+}
+
+impl<T: VertexAttrib> Mesh<T> {
+    fn new(vao: VertexArray, vbo: Buffer, ebo: Buffer, indices: usize, gl: &Gl) -> Self {
+        Self {
+            vao,
+            vbo,
+            ebo,
+            indices,
+            gl: gl.clone(),
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn create(gl: &Gl, vertex_data: Vec<T>, index_data: Vec<GLushort>) -> Self {
+        let vao = VertexArray::new(gl);
+        vao.bind();
+
+        let mut vbo = Buffer::new(&gl);
+        vbo.bind(crate::gl::ARRAY_BUFFER);
+        vbo.buffer(
+            crate::gl::ARRAY_BUFFER,
+            crate::gl::STATIC_DRAW,
+            vertex_data,
+            false,
+        );
+        T::setup_attrib_pointer(&gl);
+        vbo.unbind(crate::gl::ARRAY_BUFFER);
+
+        let index_count = index_data.len();
+        let mut ebo = Buffer::new(&gl);
+        ebo.buffer(
+            crate::gl::ELEMENT_ARRAY_BUFFER,
+            crate::gl::STATIC_DRAW,
+            index_data,
+            true,
+        );
+
+        vao.unbind();
+
+        Self::new(vao, vbo, ebo, index_count, gl)
+    }
+
+    pub fn render(&self) {
+        self.vao.bind();
+        self.ebo.bind(crate::gl::ELEMENT_ARRAY_BUFFER);
+        T::enable_attribs(&self.gl);
+        unsafe {
+            self.gl.DrawElements(
+                crate::gl::TRIANGLES,
+                self.indices as i32,
+                crate::gl::UNSIGNED_SHORT,
+                std::ptr::null(),
+            )
+        };
+        T::disable_attribs(&self.gl);
+        self.ebo.unbind(crate::gl::ELEMENT_ARRAY_BUFFER);
+        self.vao.unbind();
+    }
+}
+
 pub trait VertComponent {
     fn attrib_pointer(gl: &Gl, location: u32, stride: usize, offset: i32);
 }
 
 pub trait VertexAttrib {
     fn setup_attrib_pointer(gl: &Gl);
+
+    fn enable_attribs(gl: &Gl);
+
+    fn disable_attribs(gl: &Gl);
 }
 
 #[derive(Copy, Clone, Debug)]

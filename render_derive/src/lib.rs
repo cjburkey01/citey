@@ -17,9 +17,21 @@ fn generate_impl(ast: syn::DeriveInput) -> TokenStream2 {
     let generics = &ast.generics;
     let where_clause = &ast.generics.where_clause;
 
-    let fields_vertex_attrib_pointer = generate_vertex_attrib_pointer_calls(&ast.data);
+    let fields_pieces = generate_vertex_attrib_pointer_calls(&ast.data);
 
-    let a = quote! {
+    let mut fields_enable: Vec<TokenStream2> = Vec::with_capacity(fields_pieces.len());
+    let mut fields_disable: Vec<TokenStream2> = Vec::with_capacity(fields_pieces.len());
+    let mut fields_vertex_attrib_pointer: Vec<TokenStream2> =
+        Vec::with_capacity(fields_pieces.len());
+
+    for field in fields_pieces {
+        fields_enable.push(field.0);
+        fields_disable.push(field.1);
+        fields_vertex_attrib_pointer.push(field.2);
+    }
+
+    // Why do I need to explicitly return here?
+    return quote! {
         impl #generics crate::render::VertexAttrib for #ident #generics #where_clause {
             fn setup_attrib_pointer(gl: &crate::Gl) {
                 let stride = ::std::mem::size_of::<Self>(); // byte offset between consecutive attributes
@@ -27,13 +39,21 @@ fn generate_impl(ast: syn::DeriveInput) -> TokenStream2 {
 
                 #(#fields_vertex_attrib_pointer)*
             }
+
+            fn enable_attribs(gl: &crate::Gl) {
+                #(#fields_enable)*
+            }
+
+            fn disable_attribs(gl: &crate::Gl) {
+                #(#fields_disable)*
+            }
         }
     };
-
-    a
 }
 
-fn generate_vertex_attrib_pointer_calls(body: &syn::Data) -> Vec<TokenStream2> {
+fn generate_vertex_attrib_pointer_calls(
+    body: &syn::Data,
+) -> Vec<(TokenStream2, TokenStream2, TokenStream2)> {
     match body {
         &syn::Data::Enum(_) => panic!("VertexAttribPointers cannot be implemented for enums"),
         &syn::Data::Union(_) => panic!("VertexAttribPointers cannot be implemented for unions"),
@@ -53,7 +73,9 @@ fn generate_vertex_attrib_pointer_calls(body: &syn::Data) -> Vec<TokenStream2> {
     }
 }
 
-fn generate_struct_field_vertex_attrib_pointer_call(field: &syn::Field) -> TokenStream2 {
+fn generate_struct_field_vertex_attrib_pointer_call(
+    field: &syn::Field,
+) -> (TokenStream2, TokenStream2, TokenStream2) {
     let field_name = match field.ident {
         Some(ref i) => format!("{}", i),
         None => String::from(""),
@@ -83,21 +105,19 @@ fn generate_struct_field_vertex_attrib_pointer_call(field: &syn::Field) -> Token
 
     let field_type = &field.ty;
 
-    quote! {
-        //#field_type::attrib_pointer(gl, #location_value, stride, offset as i32);
-        unsafe {
-            gl.VertexAttribPointer(
-                #location_value as crate::gl::types::GLuint,
-                3,
-                crate::gl::FLOAT,
-                crate::gl::FALSE,
-                stride as crate::gl::types::GLint,
-                offset as *const crate::gl::types::GLvoid,
-            );
-        }
+    (
+        quote! {
+            unsafe { gl.EnableVertexAttribArray(#location_value) };
+        },
+        quote! {
+            unsafe { gl.DisableVertexAttribArray(#location_value) };
+        },
+        quote! {
+            #field_type::attrib_pointer(gl, #location_value, stride, offset as i32);
 
-        offset += ::std::mem::size_of::<#field_type>();
-    }
+            offset += ::std::mem::size_of::<#field_type>();
+        },
+    )
 }
 
 fn get_path_string(path: &syn::Path) -> String {
