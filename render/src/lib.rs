@@ -1,15 +1,48 @@
-use crate::gl::types::{GLchar, GLenum, GLint, GLsizeiptr, GLuint, GLushort, GLvoid};
-use crate::Gl;
-use std::ffi::CStr;
+use gl::types::{GLchar, GLenum, GLint, GLsizeiptr, GLuint, GLushort, GLvoid};
+use gl_bindings::{gl, Gl};
+use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem::size_of;
+
+#[macro_use]
+pub mod macros;
+
+pub trait VertComponent {
+    fn attrib_pointer(gl: &Gl, location: u32, stride: usize, offset: i32);
+}
+
+pub trait VertexAttrib {
+    fn setup_attrib_pointer(gl: &Gl);
+
+    fn enable_attribs(gl: &Gl);
+
+    fn disable_attribs(gl: &Gl);
+}
+
+pub trait Index {
+    fn get_type() -> GLenum;
+}
+
+implement_index!(GLushort, gl::UNSIGNED_SHORT);
+implement_index!(GLuint, gl::UNSIGNED_INT);
+
+pub trait Uniform {
+    fn set_uniform(&self, gl: &Gl, location: GLint);
+}
+
+impl Uniform for f32 {
+    fn set_uniform(&self, gl: &Gl, location: GLint) {
+        unsafe { gl.Uniform1f(location, *self) };
+    }
+}
 
 fn create_empty_vec_cstr(len: usize) -> Vec<u8> {
     // Create a vec with enough capacity for the string
     let mut info_log_raw: Vec<u8> = Vec::with_capacity(len + 1);
 
     // Fill the vec with spaces except for the last character, which should be
-    // null
+    // a null character
     info_log_raw.extend([b' '].iter().cycle().take(len as usize));
 
     // Return the vec
@@ -94,25 +127,24 @@ impl Drop for Shader {
 pub struct ShaderProgram {
     id: GLuint,
     gl: Gl,
-}
-
-impl Drop for ShaderProgram {
-    fn drop(&mut self) {
-        unsafe { self.gl.DeleteProgram(self.id) };
-        println!("Dropping shader program {}", self.id);
-    }
+    uniforms: HashMap<String, i32>,
 }
 
 impl ShaderProgram {
-    fn new(gl: &Gl) -> Self {
+    fn new(gl: &Gl, uniforms: HashMap<String, i32>) -> Self {
         Self {
             id: unsafe { gl.CreateProgram() },
             gl: gl.clone(),
+            uniforms,
         }
     }
 
-    pub fn new_from_shaders(gl: &Gl, shaders: Vec<Shader>) -> Result<Self, String> {
-        let program = Self::new(gl);
+    pub fn new_from_shaders(
+        gl: &Gl,
+        shaders: Vec<Shader>,
+        uniforms: Vec<String>,
+    ) -> Result<Self, String> {
+        let mut program = Self::new(gl, HashMap::with_capacity(uniforms.len()));
 
         // Attach the shaders
         for shader in shaders.iter() {
@@ -132,8 +164,32 @@ impl ShaderProgram {
             unsafe { gl.DetachShader(program.id, shader.id) };
         }
 
+        for uniform_name in uniforms.into_iter() {
+            let cstr = &CString::new(uniform_name.clone()).expect(&format!(
+                "failed to convert \"{}\" to CString",
+                &uniform_name
+            ));
+
+            let location =
+                unsafe { gl.GetUniformLocation(program.id, cstr.as_ptr() as *const GLchar) };
+            if location < 0 {
+                println!(
+                    "Failed to locate uniform \"{}\" in shader program",
+                    uniform_name
+                );
+            } else {
+                program.uniforms.insert(uniform_name, location);
+            }
+        }
+
         // Return the program
         Ok(program)
+    }
+
+    pub fn set_uniform<UniformValue: Uniform>(&self, name: &str, value: UniformValue) {
+        if let Some(location) = self.uniforms.get(&name.to_owned()) {
+            value.set_uniform(&self.gl, *location);
+        }
     }
 
     fn check_link_error(&self) -> Result<(), String> {
@@ -176,12 +232,20 @@ impl ShaderProgram {
     }
 }
 
-pub struct Buffer {
-    id: GLuint,
-    gl: Gl,
+impl Drop for ShaderProgram {
+    fn drop(&mut self) {
+        unsafe { self.gl.DeleteProgram(self.id) };
+        println!("Dropping shader program {}", self.id);
+    }
 }
 
-impl Buffer {
+pub struct Buffer<BufferType> {
+    id: GLuint,
+    gl: Gl,
+    _phantom: PhantomData<BufferType>,
+}
+
+impl<BufferType> Buffer<BufferType> {
     pub fn new(gl: &Gl) -> Self {
         Self {
             id: {
@@ -190,6 +254,7 @@ impl Buffer {
                 buff
             },
             gl: gl.clone(),
+            _phantom: PhantomData,
         }
     }
 
@@ -228,18 +293,18 @@ impl Buffer {
         }
     }
 
-    pub fn buffer<T>(&mut self, location: GLenum, usage: GLenum, data: Vec<T>, bind: bool) {
+    pub fn buffer(&mut self, location: GLenum, usage: GLenum, data: Vec<BufferType>, bind: bool) {
         self.buffer_raw(
             location,
             usage,
-            data.len() * size_of::<T>(),
+            data.len() * size_of::<BufferType>(),
             data.as_ptr() as *const GLvoid,
             bind,
         );
     }
 }
 
-impl Drop for Buffer {
+impl<T> Drop for Buffer<T> {
     fn drop(&mut self) {
         unsafe { self.gl.DeleteBuffers(1, &self.id) };
         println!("Dropping buffer {}", self.id);
@@ -283,29 +348,36 @@ impl Drop for VertexArray {
     }
 }
 
-pub struct Mesh<T: VertexAttrib> {
+pub struct Mesh<VertexType: VertexAttrib, IndexType: Index> {
     vao: VertexArray,
+    // We need ownership of the VBO so it's dropped when the mesh is, but it's
+    // never actually *used* in the code after it's added to this struct, so
+    // the compiler will display a warning
     #[allow(dead_code)]
-    vbo: Buffer,
-    ebo: Buffer,
+    vbo: Buffer<VertexType>,
+    ebo: Buffer<IndexType>,
     indices: usize,
     gl: Gl,
-    phantom: PhantomData<T>,
 }
 
-impl<T: VertexAttrib> Mesh<T> {
-    fn new(vao: VertexArray, vbo: Buffer, ebo: Buffer, indices: usize, gl: &Gl) -> Self {
+impl<VertexType: VertexAttrib, IndexType: Index> Mesh<VertexType, IndexType> {
+    fn new(
+        vao: VertexArray,
+        vbo: Buffer<VertexType>,
+        ebo: Buffer<IndexType>,
+        indices: usize,
+        gl: &Gl,
+    ) -> Self {
         Self {
             vao,
             vbo,
             ebo,
             indices,
             gl: gl.clone(),
-            phantom: PhantomData,
         }
     }
 
-    pub fn create(gl: &Gl, vertex_data: Vec<T>, index_data: Vec<GLushort>) -> Self {
+    pub fn create(gl: &Gl, vertex_data: Vec<VertexType>, index_data: Vec<IndexType>) -> Self {
         // Create the vertex array
         let vao = VertexArray::new(gl);
         vao.bind();
@@ -321,7 +393,7 @@ impl<T: VertexAttrib> Mesh<T> {
         );
 
         // Setup the attribute pointers
-        T::setup_attrib_pointer(&gl);
+        VertexType::setup_attrib_pointer(&gl);
         vbo.unbind(crate::gl::ARRAY_BUFFER);
 
         // Create the index buffer
@@ -349,7 +421,7 @@ impl<T: VertexAttrib> Mesh<T> {
         self.ebo.bind(crate::gl::ELEMENT_ARRAY_BUFFER);
 
         // Enable the attrib pointer locations
-        T::enable_attribs(&self.gl);
+        VertexType::enable_attribs(&self.gl);
 
         // Perform the render with the bound vertex array and indices
         unsafe {
@@ -362,7 +434,7 @@ impl<T: VertexAttrib> Mesh<T> {
         };
 
         // Disable the attrib pointer locations
-        T::disable_attribs(&self.gl);
+        VertexType::disable_attribs(&self.gl);
 
         // Unbind the indices
         self.ebo.unbind(crate::gl::ELEMENT_ARRAY_BUFFER);
@@ -370,18 +442,6 @@ impl<T: VertexAttrib> Mesh<T> {
         // Unbind the vertex array
         self.vao.unbind();
     }
-}
-
-pub trait VertComponent {
-    fn attrib_pointer(gl: &Gl, location: u32, stride: usize, offset: i32);
-}
-
-pub trait VertexAttrib {
-    fn setup_attrib_pointer(gl: &Gl);
-
-    fn enable_attribs(gl: &Gl);
-
-    fn disable_attribs(gl: &Gl);
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -398,18 +458,11 @@ impl Vec3 {
     }
 }
 
-impl VertComponent for Vec3 {
-    fn attrib_pointer(gl: &Gl, location: u32, stride: usize, offset: i32) {
-        unsafe {
-            gl.VertexAttribPointer(
-                location as crate::gl::types::GLuint,
-                3,
-                crate::gl::FLOAT,
-                crate::gl::FALSE,
-                stride as crate::gl::types::GLint,
-                offset as *const crate::gl::types::GLvoid,
-            );
-        }
+implement_vert_component!(Vec3, 3);
+
+impl Uniform for Vec3 {
+    fn set_uniform(&self, gl: &Gl, location: GLint) {
+        unsafe { gl.Uniform3f(location, self.x, self.y, self.z) };
     }
 }
 
@@ -419,7 +472,7 @@ impl From<(f32, f32, f32)> for Vec3 {
     }
 }
 
-#[derive(VertexAttribPointers, Copy, Clone, Debug)]
+#[derive(render_derive::VertexAttribPointers, Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct Vertex {
     #[location = 0]

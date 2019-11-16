@@ -1,10 +1,9 @@
-use gl_bindings::gl::types::GLushort;
+use gl::types::GLushort;
 use gl_bindings::{gl, Gl};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
 };
-use render::{Mesh, Vertex};
-use render::{Shader, ShaderProgram};
+use render::{Mesh, Shader, ShaderProgram, Vertex};
 use std::ffi::CString;
 use std::sync::mpsc::Receiver;
 use std::time::SystemTime;
@@ -86,6 +85,9 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
     let index_data: Vec<GLushort> = vec![0, 1, 2, 0, 2, 3];
     let mesh = Mesh::create(&gl, vertex_data, index_data);
 
+    let mut red = 0.0f32;
+    let mut dir = false;
+
     // Keep looping until the user tries to close the window
     while !window.should_close() {
         // Poll for new events and handle all of them
@@ -96,8 +98,22 @@ fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowE
             gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
+        // Uniform test
+        if dir {
+            red += 1.0f32 / 120.0f32;
+            if red >= 1.0f32 {
+                dir = !dir;
+            }
+        } else {
+            red -= 1.0f32 / 120.0f32;
+            if red <= 0.0f32 {
+                dir = !dir;
+            }
+        }
+
         // Draw a triangle
         shader.bind();
+        shader.set_uniform("red", red);
         mesh.render();
         shader.unbind();
 
@@ -175,5 +191,9 @@ fn create_shader_program(
         &CString::new(fragment_shader).unwrap(),
     )?;
 
-    ShaderProgram::new_from_shaders(&gl, vec![vert_shader, frag_shader])
+    // Uniforms are defined when the shader program is created to prevent the
+    // slowdown possibly incurred by getting the location of a shader at
+    // runtime
+    let uniforms = vec!["red".to_owned()];
+    ShaderProgram::new_from_shaders(&gl, vec![vert_shader, frag_shader], uniforms)
 }
