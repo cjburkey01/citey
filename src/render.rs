@@ -214,13 +214,16 @@ impl Buffer {
         bind: bool,
     ) {
         if bind {
+            // Bind the buffer to the location
             self.bind(location);
         }
+        // Buffer the data
         unsafe {
             self.gl
                 .BufferData(location, size as GLsizeiptr, data, usage);
         };
         if bind {
+            // Unbind the buffer from the location
             self.unbind(location);
         }
     }
@@ -303,9 +306,11 @@ impl<T: VertexAttrib> Mesh<T> {
     }
 
     pub fn create(gl: &Gl, vertex_data: Vec<T>, index_data: Vec<GLushort>) -> Self {
+        // Create the vertex array
         let vao = VertexArray::new(gl);
         vao.bind();
 
+        // Create the buffer for the vertex data
         let mut vbo = Buffer::new(&gl);
         vbo.bind(crate::gl::ARRAY_BUFFER);
         vbo.buffer(
@@ -314,9 +319,12 @@ impl<T: VertexAttrib> Mesh<T> {
             vertex_data,
             false,
         );
+
+        // Setup the attribute pointers
         T::setup_attrib_pointer(&gl);
         vbo.unbind(crate::gl::ARRAY_BUFFER);
 
+        // Create the index buffer
         let index_count = index_data.len();
         let mut ebo = Buffer::new(&gl);
         ebo.buffer(
@@ -326,15 +334,24 @@ impl<T: VertexAttrib> Mesh<T> {
             true,
         );
 
+        // Unbind the vertex array
         vao.unbind();
 
+        // Create the mesh wrapper struct
         Self::new(vao, vbo, ebo, index_count, gl)
     }
 
     pub fn render(&self) {
+        // Binds the vertex array
         self.vao.bind();
+
+        // Bind the indices
         self.ebo.bind(crate::gl::ELEMENT_ARRAY_BUFFER);
+
+        // Enable the attrib pointer locations
         T::enable_attribs(&self.gl);
+
+        // Perform the render with the bound vertex array and indices
         unsafe {
             self.gl.DrawElements(
                 crate::gl::TRIANGLES,
@@ -343,8 +360,14 @@ impl<T: VertexAttrib> Mesh<T> {
                 std::ptr::null(),
             )
         };
+
+        // Disable the attrib pointer locations
         T::disable_attribs(&self.gl);
+
+        // Unbind the indices
         self.ebo.unbind(crate::gl::ELEMENT_ARRAY_BUFFER);
+
+        // Unbind the vertex array
         self.vao.unbind();
     }
 }
