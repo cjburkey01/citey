@@ -62,7 +62,7 @@ fn main() {
     let (mut window, events) = glfw
         .create_window(300, 300, "Window", glfw::WindowMode::Windowed)
         .expect("failed to create GLFW window");
-    window.set_key_polling(true);
+    window.set_all_polling(true);
 
     // Make the window's context current
     window.make_current();
@@ -79,10 +79,10 @@ fn main() {
     }
 
     // Start the game loop
-    game_loop(glfw, window, events, gl);
+    start_game(glfw, window, events, gl);
 }
 
-fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEvent)>, gl: Gl) {
+fn start_game(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEvent)>, gl: Gl) {
     let mut last_print_time = SystemTime::now();
     let mut frames = 0;
 
@@ -116,24 +116,7 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
     // Keep looping until the user tries to close the window
     while !window.should_close() {
         // Poll for new events and handle all of them
-        glfw.poll_events();
-        for (_, event) in glfw::flush_messages(&events) {
-            println!("{:?}", event);
-            handle_window_event(&gl, &mut window, event);
-        }
-
-        // Update frame counter
-        let current_loop_time = SystemTime::now();
-        if current_loop_time
-            .duration_since(last_print_time)
-            .unwrap()
-            .as_secs()
-            >= 1
-        {
-            last_print_time = current_loop_time;
-            window.set_title(&format!("Citey | {} fps", frames));
-            frames = 0;
-        }
+        handle_window_events(&gl, &mut glfw, &events, &mut window);
 
         // Clear the screen
         unsafe {
@@ -158,8 +141,23 @@ fn game_loop(mut glfw: Glfw, mut window: Window, events: Receiver<(f64, WindowEv
         // Display changes in the window
         window.swap_buffers();
 
-        // Increment frame counter
-        frames += 1;
+        // Update frame counter
+        let current_fps = update_frame_counter(&mut last_print_time, &mut frames);
+        if current_fps >= 0 {
+            window.set_title(&format!("Citey | FPS: {}", current_fps));
+        }
+    }
+}
+
+fn handle_window_events(
+    gl: &Gl,
+    glfw: &mut glfw::Glfw,
+    events: &Receiver<(f64, WindowEvent)>,
+    window: &mut glfw::Window,
+) {
+    glfw.poll_events();
+    for (_, event) in glfw::flush_messages(events) {
+        handle_window_event(gl, window, event);
     }
 }
 
@@ -171,11 +169,28 @@ fn handle_window_event(gl: &Gl, window: &mut glfw::Window, event: glfw::WindowEv
     }
 }
 
+fn update_frame_counter(last_print_time: &mut SystemTime, frames: &mut i32) -> i32 {
+    let current_loop_time = SystemTime::now();
+    if current_loop_time
+        .duration_since(*last_print_time)
+        .unwrap()
+        .as_secs()
+        >= 1
+    {
+        let val = *frames;
+        *frames = 0;
+        *last_print_time = current_loop_time;
+        return val;
+    } else {
+        *frames += 1;
+    }
+
+    -1
+}
+
 fn init_shaders(gl: &Gl) -> ShaderProgram {
-    const VERT_SHADER: &str =
-        "#version 330 core\n\nlayout(location = 0) in vec3 vertPos;\nlayout(location = 1) in vec3 color;\n\nout vec3 vertColor;\n\nvoid main() {\n\tgl_Position = vec4(vertPos, 1.0);\n\tvertColor = color;\n}\n";
-    const FRAG_SHADER: &str =
-        "#version 330 core\n\nin vec3 vertColor;\n\nout vec4 fragColor;\n\nvoid main() {\n\tfragColor = vec4(vertColor, 1.0);\n}\n";
+    const VERT_SHADER: &str = include_str!("shader/basic_vertex.glsl");
+    const FRAG_SHADER: &str = include_str!("shader/basic_fragment.glsl");
 
     let vert_shader =
         Shader::new_from_source(&gl, gl::VERTEX_SHADER, &CString::new(VERT_SHADER).unwrap())
