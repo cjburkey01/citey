@@ -475,7 +475,7 @@ impl From<(f32, f32)> for Vec2 {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C, packed)]
 pub struct Vec3 {
     pub x: f32,

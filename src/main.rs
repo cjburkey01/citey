@@ -8,12 +8,17 @@ use glfw::{
 };
 use nalgebra::{Matrix4, Orthographic3};
 use render::{Index, Mesh, Shader, ShaderProgram, Uniform, Vec3, VertexAttrib};
+use specs::World;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::sync::mpsc::Receiver;
 use std::time::SystemTime;
+use world::Transform;
 
-#[derive(VertexAttribPointers, Copy, Clone, Debug)]
+#[macro_use]
+pub mod world;
+
+#[derive(VertexAttribPointers, Copy, Clone, Debug, PartialEq)]
 #[repr(C, packed)]
 pub struct Vertex {
     #[location = 0]
@@ -29,7 +34,7 @@ impl Vertex {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct Mat4(Matrix4<f32>);
 
 impl Deref for Mat4 {
@@ -53,6 +58,9 @@ struct App<V: VertexAttrib, I: Index> {
     glfw: Glfw,
     window: Window,
     events: Receiver<(f64, WindowEvent)>,
+
+    // The world
+    world: World,
 
     // Draw testing
     shader: ShaderProgram,
@@ -118,6 +126,7 @@ impl App<Vertex, GLushort> {
             window,
             events,
 
+            world: create_world!(),
             shader: Self::init_test_shaders(&gl),
             mesh: Self::init_test_mesh(&gl),
 
