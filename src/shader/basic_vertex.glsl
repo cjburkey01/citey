@@ -11,6 +11,7 @@ uniform mat4 projection_matrix;
 
 void main() {
     OUT.color = vertex_color;
-    
-    gl_Position = projection_matrix * vec4(vertex_position, 1.0);
+
+    gl_Position = projection_matrix
+                * vec4(vertex_position, 1.0);
 }

@@ -1,16 +1,17 @@
-use nalgebra::{Matrix4, Quaternion, Rotation3, Translation3, Vector3};
+use nalgebra::{Matrix4, Translation3, UnitQuaternion, Vector3};
 use specs::Component;
+use std::ops::Mul;
 
 #[derive(Component, Debug, Clone, PartialEq)]
 #[storage(specs::VecStorage)]
 pub struct Transform {
-    position: Vector3<f32>,
-    rotation: Quaternion<f32>,
-    scale: Vector3<f32>,
+    pub position: Vector3<f32>,
+    pub rotation: UnitQuaternion<f32>,
+    pub scale: Vector3<f32>,
 }
 
 impl Transform {
-    pub fn new(position: Vector3<f32>, rotation: Quaternion<f32>, scale: Vector3<f32>) -> Self {
+    pub fn new(position: Vector3<f32>, rotation: UnitQuaternion<f32>, scale: Vector3<f32>) -> Self {
         Self {
             position,
             rotation,
@@ -20,15 +21,21 @@ impl Transform {
 
     pub fn identity() -> Self {
         Self::new(
-            Vector3::identity(),
-            Quaternion::identity(),
+            Vector3::new(0.0, 0.0, 0.0),
+            UnitQuaternion::identity(),
             Vector3::new(1.0, 1.0, 1.0),
         )
     }
 
     pub fn get_object_transform(&self) -> Matrix4<f32> {
-        let translation = Translation3::new(self.position.x, self.position.y, self.position.z);
-        let rotation = Rotation4::new(self.rotation.into());
+        let translation: Matrix4<f32> = Translation3::from(self.position).into();
+        let rotation: Matrix4<f32> = self.rotation.to_homogeneous();
+
+        let transform: Matrix4<f32> = translation
+            .mul(&rotation)
+            .mul(&Matrix4::new_nonuniform_scaling(&self.scale));
+
+        transform
     }
 }
 

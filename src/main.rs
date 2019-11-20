@@ -1,12 +1,9 @@
-#[macro_use]
-extern crate render_derive;
-
 use gl::types::{GLfloat, GLint, GLushort};
 use gl_bindings::{gl, Gl};
 use glfw::{
     Action, Context, Glfw, Key, OpenGlProfileHint, SwapInterval, Window, WindowEvent, WindowHint,
 };
-use nalgebra::{Matrix4, Orthographic3};
+use nalgebra::{Matrix4, Orthographic3, UnitQuaternion};
 use render::{Index, Mesh, Shader, ShaderProgram, Uniform, Vec3, VertexAttrib};
 use specs::World;
 use std::ffi::CString;
@@ -18,7 +15,7 @@ use world::Transform;
 #[macro_use]
 pub mod world;
 
-#[derive(VertexAttribPointers, Copy, Clone, Debug, PartialEq)]
+#[derive(render_derive::VertexAttribPointers, Copy, Clone, Debug, PartialEq)]
 #[repr(C, packed)]
 pub struct Vertex {
     #[location = 0]
@@ -143,6 +140,7 @@ impl App<Vertex, GLushort> {
         gl: &Gl,
         vertex_shader: &str,
         fragment_shader: &str,
+        uniforms: Vec<String>,
     ) -> Result<ShaderProgram, String> {
         let vert_shader = Shader::new_from_source(
             &gl,
@@ -156,13 +154,6 @@ impl App<Vertex, GLushort> {
             &CString::new(fragment_shader).unwrap(),
         )?;
 
-        // Uniforms are defined when the shader program is created to prevent the
-        // slowdown possibly incurred by getting the location of a shader at
-        // runtime
-        let uniforms = vec!["projection_matrix", "red"]
-            .into_iter()
-            .map(|s| s.to_owned())
-            .collect();
         ShaderProgram::new_from_shaders(&gl, vec![vert_shader, frag_shader], uniforms)
     }
 
@@ -170,7 +161,15 @@ impl App<Vertex, GLushort> {
         let vert_shader = include_str!("shader/basic_vertex.glsl");
         let frag_shader = include_str!("shader/basic_fragment.glsl");
 
-        Self::create_shader_program(gl, vert_shader, frag_shader).unwrap()
+        // Uniforms are defined when the shader program is created to prevent
+        // the slowdown possibly incurred by getting the location of a shader
+        // at runtime
+        let uniforms = vec!["projection_matrix", "red"]
+            .into_iter()
+            .map(|s| s.to_owned())
+            .collect();
+
+        Self::create_shader_program(gl, vert_shader, frag_shader, uniforms).unwrap()
     }
 
     fn init_test_mesh(gl: &Gl) -> Mesh<Vertex, GLushort> {
@@ -230,6 +229,8 @@ impl App<Vertex, GLushort> {
         self.shader.set_uniform("red", &self.red);
         self.shader
             .set_uniform("projection_matrix", &Mat4(*projection_ortho.as_matrix()));
+        //        self.shader
+        //            .set_uniform("object_matrix", &Mat4(transform_mat));
         self.mesh.render();
         self.shader.unbind();
 
